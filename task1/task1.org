@@ -292,7 +292,7 @@ We will find the state $|t^*\rangle$ by simple grid search.
 Let's say the number of qubits is 4 to start, and our random state is $|r\rangle = |0011\rangle$.
 Since we require an ancilla qubit for every swap test, that means our circuit will require 12 qubits total.
 
-#+BEGIN_SRC python :session part4
+#+BEGIN_SRC python :session part4 :tangle yes
   import pennylane as qml
   from pennylane import numpy as np
 
