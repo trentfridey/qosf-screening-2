@@ -1,0 +1,11 @@
+
+\documentclass[preview,tikz]{standalone}
+\usetikzlibrary{quantikz}
+
+\begin{document}
+\begin{quantikz}
+  &                &                     &                     \lstick{\ket{0}}  & \gate{H}  & \ctrl{1}        & \gate{H} & \meter{} & \cw \\
+  &                &                     &                     \lstick{\ket{r}}  & \qw       & \swap{1}        & \qw      & \qw      & \qw \\
+  \lstick{\ket{0}} & \gate{R_{y}(\theta)} & \gate{R_{z}(\phi)} & \qw              & \qw       & \targX{}      & \qw      & \qw \\
+\end{quantikz}
+\end{document}
