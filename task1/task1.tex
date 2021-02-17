@@ -1,4 +1,4 @@
-% Created 2021-02-15 Mon 00:07
+% Created 2021-02-16 Tue 23:27
 % Intended LaTeX compiler: pdflatex
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
@@ -35,7 +35,7 @@
 \pagebreak
 
 \section{Part 1}
-\label{sec:org1d227ca}
+\label{sec:org547f5d1}
 
 A variational quantum circuit that is able to generate the most general 1-qubit state, starting from the initial state \(|0\rangle\) is the following:
 
@@ -102,7 +102,7 @@ which is equivalent to \(|\theta,\phi\rangle\) modulo a global phase. \(\blacksq
 \pagebreak
 
 \section{Part 2}
-\label{sec:org1e8b781}
+\label{sec:org47932fd}
 
 Let \(|r\rangle\) be a random 1-qubit state. From above, we know that it can be written as \(|r\rangle = |\theta_0,\phi_0\rangle\) for some angles \(\theta_0, \phi_0\). Since we don't know the angles ahead of time, we can't find the random state by just tuning our gates to \(R_z(\phi_0)\) and \(R_y(\theta_0)\). Instead, we can use the SWAP test and machine learning to discover the angles. The principle behind this approach is minimizing a cost function in terms of the overlap between the random state \(|r\rangle\) and the controlled state \(|\theta, \phi\rangle\)
 
@@ -147,7 +147,7 @@ We can solve this via an appropriate minimization algorithm.
 \pagebreak
 
 \subsection{Implementation}
-\label{sec:org60df864}
+\label{sec:org4ed7ace}
 
 
 We can implement the circuit and the optimization using the Pennylane Python library:
@@ -173,7 +173,10 @@ dev = qml.device('default.qubit', wires=3, shots=num_shots)
 @qml.qnode(dev)
 def var_swap(params):
   # random state preparation
-  qml.QubitStateVector([np.cos(t_0/2.), np.sqrt(0.5)*(1+1j)*np.sin(t_0/2.)], wires=1)
+  qml.QubitStateVector([
+      np.cos(t_0/2.),
+      np.sqrt(0.5)*(1+1j)*np.sin(t_0/2.)
+  ], wires=1)
   # actual circuit follows:
   qml.RY(params[0], wires=2)
   qml.RZ(params[1], wires=2)
@@ -224,13 +227,13 @@ print(best_params)
 \end{minted}
 
 \begin{verbatim}
-[0.3565424  0.64350111]
+[0.40703541 0.93070817]
 \end{verbatim}
 
 
-The optimization gives \(\theta =\) \texttt{0.3565423996331807} and \(\phi =\) \texttt{0.6435011087932843}, which differs from the actual best parameters by:
+The optimization gives \(\theta =\) \texttt{0.40703540572409325} and \(\phi =\) \texttt{0.9307081740331506}, which differs from the actual best parameters by:
 
-$\theta - \pi/8 = -0.0362, \phi - \pi/4 = -0.142$
+$\theta - \pi/8 = 0.0143, \phi - \pi/4 = 0.145$
 
 
 \pagebreak
@@ -243,7 +246,7 @@ We visually check the progression of our optimizer with a plot of cost-vs-steps:
 
 
 \section{Part 3}
-\label{sec:orgd93e65c}
+\label{sec:org0ebf21d}
 
 In this part we extend the analysis from the first two parts to perform a SWAP test on a \(N\) - qubit product state.
 
@@ -253,10 +256,98 @@ Now the random state \(|r\rangle\) has each qubit in either the \(|0\rangle\) or
   |r\rangle = \bigotimes_{i=1}^{N}|k_{i}\rangle, \qquad k_{i} \in \{0,1\}
 \end{equation*}
 
+Since we know that each qubit in the product state is limited to either \(|0\rangle\) or \(|1\rangle\), we can change our approach slightly to simplify things.
+We drop the parametric rotation gates from the circuit in Part 2, and instead determine each qubit in the random state via a grid search.
+That is, we perform a multi-qubit SWAP test by comparing the random state \(|r\rangle\) to the test state \(|t\rangle\), where \(|t\rangle = |t_1 t_2 \cdots t_N \rangle\), \(t_i \in \{ 0, 1\}\). Our estimate for the random state \(|r\rangle\) will be the state \(|t^*\rangle\) that maximizes the overlap \(\left|\langle r | t^* \rangle\right|^2\)
+Equivalently, we can seek the minimizer of the function \(1-\left|\langle r | t\rangle\right|^2\):
+
+\begin{equation*}
+|t^*\rangle = \arg\min_{t_{1}t_{2}\cdots t_{N}}(1-\left|\langle r | t_1 t_2 \cdots t_N \rangle\right|^2)
+\end{equation*}
+
+We will find the state \(|t^*\rangle\) by simple grid search.
+
+\subsection{Implementation}
+\label{sec:orgd87c9eb}
+
+Let's say the number of qubits is 4 to start, and our random state is \(|r\rangle = |0011\rangle\).
+Since we require an ancilla qubit for every swap test, that means our circuit will require 12 qubits total.
+
+\begin{minted}[]{python}
+import pennylane as qml
+from pennylane import numpy as np
+
+n_qubits = 4 * 3
+
+num_shots = 1000
+dev4 = qml.device('default.qubit', wires=n_qubits, shots=num_shots)
+
+def init_random_state(state):
+  qml.BasisState(state, wires=[1,4,7,10])
+
+def swap(init_wire, theta):
+  qml.RY(theta, wires=init_wire+2)
+  qml.Hadamard(wires=init_wire)
+  qml.CSWAP(wires=[init_wire, init_wire+1, init_wire+2])
+  qml.Hadamard(wires=init_wire)
+
+@qml.qnode(dev4)
+def n_swap(params):
+  init_random_state(np.array([0,0,1,1]))
+  swap(0, params[0])
+  swap(3, params[1])
+  swap(6, params[2])
+  swap(9, params[3])
+  return [qml.sample(qml.PauliZ(i)) for i in range(0,11,3)]
+\end{minted}
+
+Our cost function is the similar to the last section:
+
+\begin{minted}[]{python}
+def cost(params):
+  results = n_swap(params)
+  return [1-(1./num_shots)*np.sum(results[i]) for i in range(4)]
+\end{minted}
+
+
+And we run the simulation:
+
+\begin{minted}[]{python}
+param_set = [np.array([np.pi*i,np.pi*j,np.pi*k,np.pi*l])
+             for i in range(0,2)
+             for j in range(0,2)
+             for k in range(0,2)
+             for l in range(0,2)]
+cost_set = []
+for param in param_set:
+  cost_set.append(cost(param))
+\end{minted}
+
+Finally we find the optimal value by grid search:
+
+\begin{minted}[]{python}
+best_cost = 1
+best_params = []
+for r in range(len(cost_set)):
+  run_cost = np.sum(cost_set[r])
+  if run_cost < best_cost:
+    best_cost = run_cost
+    best_params = param_set[r]
+
+print(best_params, best_cost)
+\end{minted}
+
+\begin{verbatim}
+[0.         0.         3.14159265 3.14159265] 0.0
+\end{verbatim}
+
+
+Which gives the results as expected.
+
 \pagebreak
 
 \section{References}
-\label{sec:org73ac948}
+\label{sec:orgbe5b94e}
 
 \href{https://en.wikipedia.org/wiki/Swap\_test}{Wikipedia - SWAP test}
 

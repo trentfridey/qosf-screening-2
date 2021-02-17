@@ -290,14 +290,82 @@ We will find the state $|t^*\rangle$ by simple grid search.
 ** Implementation
 
 Let's say the number of qubits is 4 to start, and our random state is $|r\rangle = |0011\rangle$.
-We can see later how efficiently this scales.
+Since we require an ancilla qubit for every swap test, that means our circuit will require 12 qubits total.
 
-#+BEGIN_SRC python :session
-  ## set up N-qubit SWAP circuit
-  ## with 1000 shots per starting state: 0 or 1
-  ## collate results into a length 2^N array
-  ## and find minimum argument -- state will be given by binary representation of index in array.
+#+BEGIN_SRC python :session part4
+  import pennylane as qml
+  from pennylane import numpy as np
+
+  n_qubits = 4 * 3
+
+  num_shots = 1000
+  dev4 = qml.device('default.qubit', wires=n_qubits, shots=num_shots)
+
+  def init_random_state(state):
+    qml.BasisState(state, wires=[1,4,7,10])
+  
+  def swap(init_wire, theta):
+    qml.RY(theta, wires=init_wire+2)
+    qml.Hadamard(wires=init_wire)
+    qml.CSWAP(wires=[init_wire, init_wire+1, init_wire+2])
+    qml.Hadamard(wires=init_wire)
+
+  @qml.qnode(dev4)
+  def n_swap(params):
+    init_random_state(np.array([0,0,1,1]))
+    swap(0, params[0])
+    swap(3, params[1])
+    swap(6, params[2])
+    swap(9, params[3])
+    return [qml.sample(qml.PauliZ(i)) for i in range(0,11,3)]
 #+END_SRC
+
+#+RESULTS:
+
+Our cost function is the similar to the last section:
+
+#+BEGIN_SRC python :session part4 :tangle yes
+  def cost(params):
+    results = n_swap(params)
+    return [1-(1./num_shots)*np.sum(results[i]) for i in range(4)]
+#+END_SRC
+
+#+RESULTS:
+
+
+And we run the simulation:
+
+#+BEGIN_SRC python :session part4 :tangle yes
+         param_set = [np.array([np.pi*i,np.pi*j,np.pi*k,np.pi*l])
+                      for i in range(0,2)
+                      for j in range(0,2)
+                      for k in range(0,2)
+                      for l in range(0,2)]
+         cost_set = []
+         for param in param_set:
+           cost_set.append(cost(param))
+#+END_SRC
+
+#+RESULTS:
+
+Finally we find the optimal value by grid search:
+
+#+BEGIN_SRC python :session part4 :results output :tangle yes :exports both 
+  best_cost = 1
+  best_params = []
+  for r in range(len(cost_set)):
+    run_cost = np.sum(cost_set[r])
+    if run_cost < best_cost:
+      best_cost = run_cost
+      best_params = param_set[r]
+
+  print(best_params, best_cost)
+#+END_SRC
+
+#+RESULTS:
+: [0.         0.         3.14159265 3.14159265] 0.0
+
+Which gives the results as expected.
 
 \pagebreak
 
